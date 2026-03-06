@@ -14,6 +14,9 @@ out/
 .env.*.local
 .env.example
 
+# Service account credentials (never commit these)
+credentials/
+
 # IDE
 .vscode/
 .idea/

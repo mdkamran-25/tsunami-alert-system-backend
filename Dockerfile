@@ -8,15 +8,17 @@ COPY package*.json ./
 COPY tsconfig.json ./
 COPY prisma ./prisma
 
-# Install dependencies
+# Install ALL dependencies (including devDeps for build)
 RUN npm ci
+
+# Generate Prisma client BEFORE TypeScript compilation
+RUN npx prisma generate
 
 # Copy source code
 COPY src ./src
 
-# Build application
+# Compile TypeScript
 RUN npm run build
-RUN npm run db:generate
 
 # Runtime stage
 FROM node:20-alpine
@@ -28,24 +30,30 @@ RUN apk add --no-cache dumb-init
 
 # Copy package files
 COPY package*.json ./
+COPY prisma ./prisma
 
 # Install production dependencies only
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
-# Copy built application
+# Re-generate Prisma client against production node_modules
+RUN npx prisma generate
+
+# Copy compiled JS and startup script
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
 
 USER nodejs
 
 EXPOSE 4000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD node -e "require('http').get('http://localhost:4000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/index.js"]
+CMD ["sh", "start.sh"]

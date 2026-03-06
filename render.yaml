@@ -1,0 +1,67 @@
+# Render Infrastructure-as-Code
+# Docs: https://render.com/docs/infrastructure-as-code
+
+databases:
+  - name: tsunami-db
+    databaseName: tsunami_db
+    user: tsunami_user
+    plan: starter # Use "starter" ($7/mo). Free tier was discontinued Jan 2024.
+    region: oregon
+    postgresMajorVersion: 16
+
+services:
+  - type: web
+    name: tsunami-alert-backend
+    runtime: docker
+    region: oregon
+    plan: starter # Change to "free" to use free tier (spins down after inactivity)
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    envVars:
+      # ── Database ─────────────────────────────────────────────────────────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tsunami-db
+          property: connectionString
+      - key: DIRECT_DATABASE_URL
+        fromDatabase:
+          name: tsunami-db
+          property: connectionString
+
+      # ── Server ───────────────────────────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: LOG_LEVEL
+        value: info
+
+      # ── JWT (auto-generated secret) ───────────────────────────────────────────
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRATION
+        value: 24h
+      - key: JWT_REFRESH_EXPIRATION
+        value: 7d
+
+      # ── Email (set these manually in Render dashboard) ────────────────────────
+      - key: EMAIL_SERVICE
+        value: gmail
+      - key: EMAIL_USER
+        sync: false # Set in Render dashboard
+      - key: EMAIL_PASSWORD
+        sync: false # Set in Render dashboard (use Gmail App Password)
+      - key: EMAIL_FROM
+        value: 'Tsunami Alert System <alerts@tsunami-system.com>'
+
+      # ── Firebase Admin (set manually in Render dashboard) ─────────────────────
+      - key: FIREBASE_PROJECT_ID
+        value: tsunamimvp-99bf1
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false # Set in Render dashboard
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false # Set in Render dashboard (paste full PEM key)
+
+      # ── External APIs ─────────────────────────────────────────────────────────
+      - key: USGS_GPS_API_ENDPOINT
+        value: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson
