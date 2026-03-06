@@ -51,7 +51,7 @@ export function initializeEmailService(): boolean {
     transporter = nodemailer.createTransport(emailConfig);
 
     // Test connection
-    transporter.verify((error, success) => {
+    transporter.verify((error: Error | null, success: boolean) => {
       if (error) {
         log.error('❌ Email service verification failed:', error);
       } else {
