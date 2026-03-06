@@ -85,10 +85,16 @@ export const createApolloServer = async (httpServer: any): Promise<ApolloServer<
 export const setupExpressApp = (app: Express, server: ApolloServer) => {
   // Middleware setup
   app.use(helmet());
+
+  const rawOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+  const allowedOrigins = rawOrigin === '*'
+    ? '*'
+    : rawOrigin.split(',').map((o) => o.trim());
+
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-      credentials: true,
+      origin: allowedOrigins,
+      credentials: allowedOrigins !== '*',
     }),
   );
   app.use(pinoHttp({ logger: pino() }));
