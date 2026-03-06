@@ -1,0 +1,405 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== USER & AUTH ==========
+enum UserRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+model User {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  displayName   String?
+  photoURL      String?
+  firebaseUID   String?         @unique
+  role          UserRole        @default(VIEWER)
+  isActive      Boolean         @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  preferences   UserPreferences?
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@index([email])
+  @@index([firebaseUID])
+}
+
+model UserPreferences {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Alert preferences
+  alertTypes            String[]  @default(["WATCH", "WARNING", "ALERT"])
+  monitoredRegions      String[]  @default([])
+  
+  // Notification preferences
+  emailNotifications    Boolean   @default(true)
+  smsNotifications      Boolean   @default(false)
+  pushNotifications     Boolean   @default(true)
+  
+  // UI preferences
+  theme                 String    @default("light")
+  language              String    @default("en")
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ========== GPS MONITORING ==========
+enum GPSQuality {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+}
+
+model GPSStation {
+  id            String        @id @default(cuid())
+  stationId     String        @unique
+  name          String
+  network       String        @default("PBO")
+  latitude      Float
+  longitude     Float
+  elevation     Float
+  description   String?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  readings      GPSReading[]
+
+  @@index([stationId])
+  @@index([latitude, longitude])
+  @@index([network])
+}
+
+model GPSReading {
+  id              String        @id @default(cuid())
+  stationId       String
+  station         GPSStation    @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  
+  // Position data
+  latitude        Float
+  longitude       Float
+  elevation       Float
+  
+  // Displacement vectors (in mm)
+  displacementX   Float
+  displacementY   Float
+  displacementZ   Float
+  magnitude       Float
+  
+  // Quality metrics
+  quality         GPSQuality   @default(GOOD)
+  confidence      Float        @default(95.0)
+  
+  // Metadata
+  metadata        Json?
+  timestamp       DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+
+  @@index([stationId])
+  @@index([timestamp])
+  @@index([magnitude])
+}
+
+// ========== SATELLITE IMAGERY ==========
+model SatelliteData {
+  id                  String      @id @default(cuid())
+  imageUrl            String
+  cloudinaryPublicId  String?
+  
+  // Location
+  region              String
+  regionBounds        String      // JSON string [minLng, minLat, maxLng, maxLat]
+  regionCenter        String      // JSON string [lng, lat]
+  
+  // Analysis
+  anomalyScore        Float       @default(0.0)
+  anomalyDetected     Boolean     @default(false)
+  
+  // Metadata
+  metadata            Json        // {satellite, resolution, polarization, processingLevel, cloudCover, dataSource}
+  processingInfo      Json?       // {baselineComparison, anomalyThreshold, processingTime, algorithm}
+  
+  timestamp           DateTime    @default(now())
+  createdAt           DateTime    @default(now())
+
+  @@index([region])
+  @@index([timestamp])
+  @@index([anomalyScore])
+}
+
+// ========== ALERT MANAGEMENT ==========
+enum AlertStatus {
+  SAFE
+  WATCH
+  WARNING
+  ALERT
+}
+
+enum AlertLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model AlertStatusRecord {
+  id                    String      @id @default(cuid())
+  alertId               String      @unique @default(cuid())
+  status                AlertStatus @default(SAFE)
+  level                 AlertLevel  @default(NONE)
+  confidence            Float       @default(0.0)
+  message               String
+  region                String
+  
+  // Triggers
+  gpsTriggered          Boolean     @default(false)
+  satelliteTriggered    Boolean     @default(false)
+  
+  // Details
+  anomalyDetails        Json?       // {triggeredStations, maxDisplacement, anomalousAreas}
+  estimatedImpactTime   DateTime?
+  affectedAreas         String[]    @default([])
+  evacuationZones       String[]    @default([])
+  
+  // Status
+  isActive              Boolean     @default(true)
+  resolved              Boolean     @default(false)
+  resolvedAt            DateTime?
+  resolutionNotes       String?
+  
+  // Timing
+  lastUpdated           DateTime    @default(now())
+  duration              Int?        // seconds
+  timestamp             DateTime    @default(now())
+  createdAt             DateTime    @default(now())
+
+  // Relations
+  detectionResults      DetectionResult[]
+
+  @@index([region])
+  @@index([status])
+  @@index([timestamp])
+  @@index([isActive])
+}
+
+// ========== DETECTION & ANALYSIS ==========
+enum DetectionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model DetectionResult {
+  id                    String            @id @default(cuid())
+  alertId               String?
+  alert                 AlertStatusRecord? @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  
+  // Analysis status
+  status                DetectionStatus   @default(PENDING)
+  timestamp             DateTime          @default(now())
+  
+  // GPS Analysis
+  gpsAnalysis           Json              // {anomalousStations, maxDisplacement, meanDisplacement, confidence, status}
+  gpsAnomalyDetected    Boolean           @default(false)
+  gpsConfidence         Float             @default(0.0)
+  
+  // Satellite Analysis
+  satelliteAnalysis     Json              // {anomalyDetected, anomalyScore, confidence, status}
+  satelliteAnomalyDetected Boolean        @default(false)
+  satelliteConfidence   Float             @default(0.0)
+  
+  // Combined Analysis
+  combinedAnalysis      Json              // {combinedConfidence, detectionStatus, riskAdjustedConfidence}
+  combinedConfidence    Float             @default(0.0)
+  recommendedAction     String?
+  
+  // Metadata
+  processingTime        Int               @default(0) // milliseconds
+  region                String
+  metadata              Json?
+  errorMessage          String?
+  
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([alertId])
+  @@index([status])
+  @@index([timestamp])
+  @@index([region])
+}
+
+// ========== NOTIFICATIONS ==========
+enum NotificationType {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+  WEBHOOK
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+}
+
+model Notification {
+  id                String              @id @default(cuid())
+  type              NotificationType
+  recipient         String              // email, phone, user ID, or URL
+  subject           String?
+  message           String
+  htmlContent       String?
+  
+  // Status tracking
+  status            NotificationStatus  @default(PENDING)
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failureReason     String?
+  
+  // Metadata
+  metadata          Json?               // Additional data like region, alertId, etc.
+  
+  // Retry info
+  retryCount        Int                 @default(0)
+  nextRetryAt       DateTime?
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([recipient])
+  @@index([createdAt])
+}
+
+// ========== SYSTEM HEALTH ==========
+enum ComponentStatus {
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  UNKNOWN
+}
+
+model SystemHealth {
+  id              String              @id @default(cuid())
+  overallStatus   ComponentStatus     @default(HEALTHY)
+  uptime          Float               @default(100.0) // percentage
+  
+  // Component status
+  components      ComponentHealth[]
+  
+  // Metrics
+  metrics         Json                // {responseTime, errorRate, dataFreshness, resourceUsage}
+  
+  lastCheck       DateTime            @default(now())
+  createdAt       DateTime            @default(now())
+
+  @@index([overallStatus])
+  @@index([lastCheck])
+}
+
+model ComponentHealth {
+  id                String              @id @default(cuid())
+  systemHealthId    String
+  systemHealth      SystemHealth        @relation(fields: [systemHealthId], references: [id], onDelete: Cascade)
+  
+  name              String
+  status            ComponentStatus     @default(UNKNOWN)
+  responseTime      Int                 @default(0) // milliseconds
+  errorRate         Float               @default(0.0) // percentage
+  lastCheck         DateTime            @default(now())
+  details           Json?
+  errorMessage      String?
+  
+  createdAt         DateTime            @default(now())
+
+  @@unique([systemHealthId, name])
+  @@index([systemHealthId])
+  @@index([status])
+}
+
+// ========== AUDIT LOGGING ==========
+model AuditLog {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action          String
+  resource        String
+  resourceId      String?
+  
+  changes         Json?     // before/after values
+  metadata        Json?
+  
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+}
+
+// ========== DATA INGESTION ==========
+model DataIngestionLog {
+  id              String    @id @default(cuid())
+  source          String    // "USGS_GPS", "GOOGLE_EARTH_ENGINE", etc.
+  status          String    // "SUCCESS", "FAILED", "PARTIAL"
+  
+  recordsProcessed Int      @default(0)
+  recordsFailed    Int      @default(0)
+  
+  metadata        Json?
+  errorMessage    String?
+  
+  startTime       DateTime
+  endTime         DateTime  @default(now())
+  duration        Int       // milliseconds
+
+  createdAt       DateTime  @default(now())
+
+  @@index([source])
+  @@index([status])
+  @@index([createdAt])
+}
