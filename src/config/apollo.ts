@@ -87,9 +87,7 @@ export const setupExpressApp = (app: Express, server: ApolloServer) => {
   app.use(helmet());
 
   const rawOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
-  const allowedOrigins = rawOrigin === '*'
-    ? '*'
-    : rawOrigin.split(',').map((o) => o.trim());
+  const allowedOrigins = rawOrigin === '*' ? '*' : rawOrigin.split(',').map((o) => o.trim());
 
   app.use(
     cors({
