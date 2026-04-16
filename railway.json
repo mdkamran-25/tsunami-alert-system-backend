@@ -5,6 +5,8 @@
       "source": {
         "type": "github"
       },
+      "buildCommand": "",
+      "startCommand": "",
       "variables": {
         "RAILWAY_ENVIRONMENT_NAME": "production"
       }

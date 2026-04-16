@@ -9,7 +9,7 @@ COPY tsconfig.json ./
 COPY prisma ./prisma
 
 # Install ALL dependencies (including devDeps for build)
-RUN npm ci
+RUN npm install
 
 # Generate Prisma client BEFORE TypeScript compilation
 RUN npx prisma generate
@@ -33,7 +33,7 @@ COPY package*.json ./
 COPY prisma ./prisma
 
 # Install production dependencies only
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Re-generate Prisma client against production node_modules
 RUN npx prisma generate
