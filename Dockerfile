@@ -25,8 +25,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dumb-init to handle signals properly
-RUN apk add --no-cache dumb-init
+# Install dumb-init and OpenSSL (required by Prisma native engine)
+RUN apk add --no-cache dumb-init openssl
 
 # Copy package files
 COPY package*.json ./
