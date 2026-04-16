@@ -156,7 +156,7 @@ export const setupExpressApp = (app: Express, server: ApolloServer) => {
     <a href="/ready">Ready Check</a>
   </div>
   <div class="sandbox-container">
-    <iframe src="https://sandbox.apollo.dev/?endpoint=${encodeURIComponent('https://major-project-backend-o1vb.onrender.com/graphql')}" />
+    <iframe src="https://sandbox.apollo.dev/?endpoint=${encodeURIComponent('https://tsunami-alert-backend-production.up.railway.app/graphql')}" />
   </div>
 </body>
 </html>`);
